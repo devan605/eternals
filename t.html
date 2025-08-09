@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Snake Game</title>
+  <style>
+    body { background: #383434; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    canvas { background: #111; display: block; margin: 0 auto; border: 2px solid rgb(222, 229, 222); }
+    #score, #high-score { color: #0f0; font-family: monospace; text-align: center; margin-bottom: 10px; }
+    #menu { color: #0f0; font-family: monospace; text-align: center; }
+    #start-button { padding: 10px 20px; font-size: 16px; background: #0f0; color: #111; border: none; cursor: pointer; }
+    #start-button:hover { background: #0c0; }
+    #sound-toggle { padding: 5px 10px; font-size: 14px; background: #0f0; color: #111; border: none; cursor: pointer; margin-top: 10px; }
+    #sound-toggle:hover { background: #0c0; }
+    h1 {
+      font-size: 80px;
+      margin: 2;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu">
+    <h1>Paambaadi pappan</h1>
+    <button id="start-button">Start Game</button>
+    <button id="sound-toggle">Sound: ON</button>
+  </div>
+  <div id="game-container" style="display: none;">
+    <div id="score">Score: 0</div>
+    <div id="high-score">High Score: 0</div>
+    <canvas id="game" width="400" height="400"></canvas>
+  </div>
+
+  <!-- Audio elements -->
+  <audio id="eat-sound" preload="auto">
+    <source src="eat.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="game-over-sound" preload="auto">
+    <source src="gameover.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    var foodColor = "#f00";
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const box = 20;
+    let snake = [{x: 200, y: 200}];
+    let direction = 'RIGHT';
+    let food = {x: Math.floor(Math.random()*20)*box, y: Math.floor(Math.random()*20)*box};
+    let score = 0;
+    let highScore = parseInt(localStorage.getItem('highScore') || '0');
+    let gameInterval;
+    let soundEnabled = true;
+
+    // Audio elements
+    const eatSound = document.getElementById('eat-sound');
+    const gameOverSound = document.getElementById('game-over-sound');
+
+    // Set audio volume (adjust as needed)
+    eatSound.volume = 0.5;
+    gameOverSound.volume = 0.7;
+
+    document.getElementById('high-score').textContent = 'High Score: ' + highScore;
+
+    // Sound toggle functionality
+    document.getElementById('sound-toggle').addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      document.getElementById('sound-toggle').textContent = 'Sound: ' + (soundEnabled ? 'ON' : 'OFF');
+    });
+
+    // Function to play sound with error handling
+    function playSound(audioElement) {
+      if (soundEnabled) {
+        try {
+          audioElement.currentTime = 0; // Reset to beginning
+          const playPromise = audioElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log('Audio play failed:', error);
+            });
+          }
+        } catch (error) {
+          console.log('Audio error:', error);
+        }
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp' && direction !== 'DOWN') direction = 'UP';
+      if (e.key === 'ArrowDown' && direction !== 'UP') direction = 'DOWN';
+      if (e.key === 'ArrowLeft' && direction !== 'RIGHT') direction = 'LEFT';
+      if (e.key === 'ArrowRight' && direction !== 'LEFT') direction = 'RIGHT';
+    });
+
+    // Touch controls for Android
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener('touchstart', e => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    });
+    document.addEventListener('touchmove', e => {
+      const touchEndX = e.touches[0].clientX;
+      const touchEndY = e.touches[0].clientY;
+      const diffX = touchEndX - touchStartX;
+      const diffY = touchEndY - touchStartY;
+      if (Math.abs(diffX) > Math.abs(diffY)) {
+        if (diffX > 0 && direction !== 'LEFT') direction = 'RIGHT';
+        if (diffX < 0 && direction !== 'RIGHT') direction = 'LEFT';
+      } else {
+        if (diffY > 0 && direction !== 'UP') direction = 'DOWN';
+        if (diffY < 0 && direction !== 'DOWN') direction = 'UP';
+      }
+    });
+
+    function draw() {
+      ctx.clearRect(0, 0, 400, 400);
+
+      // Draw snake with alternating shades of green
+      snake.forEach((s, index) => {
+        ctx.fillStyle = index % 2 === 0 ? '#0f0' : '#0c0';
+        ctx.fillRect(s.x, s.y, box, box);
+      });
+
+      // Draw food
+      if(foodColor == "#f00"){
+        foodColor = "#0f0"
+        ctx.fillStyle = "#0f0"
+      }else{
+        foodColor = "#f00"
+        ctx.fillStyle = "#f00"
+      }
+      ctx.font = "20px serif"
+      ctx.fillText("🍎",food.x+2, food.y+18,500);
+
+      // Move snake
+      let head = {x: snake[0].x, y: snake[0].y};
+      if (direction === 'UP') head.y -= box;
+      if (direction === 'DOWN') head.y += box;
+      if (direction === 'LEFT') head.x -= box;
+      if (direction === 'RIGHT') head.x += box;
+      if(head.x < 0){
+        head.x = 400 - box;
+      }
+      if(head.x >= 400){
+        head.x = 0;
+      }
+      if(head.y < 0){
+        head.y = 400 - box;
+      }
+      if(head.y >= 400){
+        head.y = 0;
+      }
+      
+      // Game over conditions
+      if (
+        snake.some(segment => segment.x === head.x && segment.y === head.y)
+      ) {
+        // Play game over sound
+        playSound(gameOverSound);
+        
+        clearInterval(gameInterval);
+        // alert('Game Over! Your score: ' + score);
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('highScore', highScore);
+          document.getElementById('high-score').textContent = 'High Score: ' + highScore;
+        }
+        snake = [{x: 200, y: 200}];
+        direction = 'RIGHT';
+        score = 0;
+        food = {x: Math.floor(Math.random()*20)*box, y: Math.floor(Math.random()*20)*box};
+        document.getElementById('score').textContent = 'Score: 0';
+        document.getElementById('menu').style.display = 'block';
+        document.getElementById('game-container').style.display = 'none';
+        return;
+      }
+
+      snake.unshift(head);
+
+      // Eat food
+      if (head.x === food.x && head.y === food.y) {
+        // Play eating sound
+        playSound(eatSound);
+        
+        score++;
+        document.getElementById('score').textContent = 'Score: ' + score;
+        food = {x: Math.floor(Math.random()*20)*box, y: Math.floor(Math.random()*20)*box};
+      } else {
+        snake.pop();
+      }
+    }
+
+    document.getElementById('start-button').addEventListener('click', () => {
+      document.getElementById('menu').style.display = 'none';
+      document.getElementById('game-container').style.display = 'block';
+      gameInterval = setInterval(draw, 100);
+    });
+  </script>
+</body>
+</html>
